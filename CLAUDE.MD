@@ -49,9 +49,11 @@ Je travaille en équipe sur un dépôt Gitlab. Tu dois **absolument** respecter 
 
 ### Gestion des branches
 - **NE JAMAIS** push directement sur la branche `main` ou `master`.
-- **NE JAMAIS** créer de branches commençant par `claude/...` ou des noms aléatoires.
-- Si tu dois créer une branche pour ma fonctionnalité, utilise le format : `nathan/feat/gamma-adaptatif` ou `nathan/fix/nom-du-bug-gamma`.
-- Demande-moi toujours confirmation avant de changer de branche ou d'en créer une nouvelle.
+- **NE JAMAIS** créer ni pousser de branches commençant par `claude/...` ou avec des noms aléatoires (ex: `claude/frosty-bardeen`, `claude/fervent-napier`). Ces branches polluent le dépôt partagé de l'équipe.
+- **TOUJOURS** travailler directement sur une branche au format `nathan/feat/...` ou `nathan/fix/...` dès le début. Ne jamais travailler sur une branche `claude/...` puis la renommer : créer directement la bonne branche.
+- Format obligatoire : `nathan/feat/nom-de-la-fonctionnalite` ou `nathan/fix/nom-du-bug`.
+- Exemples valides : `nathan/feat/gamma-adaptatif`, `nathan/fix/bug-euler-maruyama`.
+- Demande-moi toujours confirmation avant de créer une nouvelle branche.
 
 ### Commits
 - Fais des petits commits logiques et atomiques (pas de commit géant "mise à jour générale").
