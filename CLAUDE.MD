@@ -4,7 +4,15 @@
 Ce projet implémente et étend le modèle de Chiarella étendu (Majewski, Ciliberti, Bouchaud, 2020). C'est un modèle Agent-Based (HABM) simulant la coexistence des effets de tendance (momentum) et de valeur (mean-reversion) sur les marchés financiers. 
 
 ## Focus Actuel (Ma tâche dans le groupe)
-L'objectif principal actuel est de modifier le paramètre de saturation des trend-followers, \(\gamma\), pour le rendre **dynamique et dépendant de l'état du marché** (proxy du VIX / volatilité réalisée), afin de modéliser l'aversion au risque variable des investisseurs.
+Rendre γ dynamique pour modéliser l'aversion au risque variable des investisseurs.
+
+**État d'avancement :**
+- ✅ Modèle 1 — Baseline (γ constant) : `ChiarellaModel`
+- ✅ Modèle 2 — Adaptatif linéaire (γ ∝ σ_réal) : `AdaptiveGammaModel`
+- ✅ Modèle 3 — Mispricing exponentiel (γ ∝ exp(λ|P−V|)) : `MispricingGammaModel`
+- 🔄 **Modèle 4 — Mispricing décroissant (γ ∝ 1/(1+λ|P−V|)) : `DecreasingMispricingGammaModel`** ← focus actuel
+
+**Motivation du modèle 4 :** les modèles 2 et 3 *augmentent* γ avec la bulle, ce qui via la pente raide du tanh sur les signaux intermédiaires amplifie paradoxalement les bulles (+1.8 à +8 % de std du mispricing). Le modèle 4 inverse la logique : γ *diminue* quand |P−V| est grand, réduisant directement la demande des trend-followers pendant les bulles.
 
 ## Équations Mathématiques (Modèle de base)
 Le système dynamique stochastique en temps continu est défini par :
@@ -21,11 +29,13 @@ Où :
 - \(\alpha\) : Inverse de l'horizon temporel des trend-followers
 - \(\gamma(t)\) : Paramètre de saturation (notre focus)
 
-## Formulations pour \(\gamma(t)\) à implémenter
-Claude, lorsque tu devras coder l'extension, base-toi sur la volatilité réalisée \(\sigma_{realisee}(t)\) sur une fenêtre glissante (ex: 12 mois) :
+## Formulations pour \(\gamma(t)\)
 1. **Modèle constant (Baseline)** : \(\gamma(t) = \gamma_0\)
 2. **Modèle adaptatif linéaire** : \(\gamma(t) = \gamma_0 \cdot \left(1 + \theta \cdot \frac{\sigma_{realisee}(t)}{\sigma_{baseline}}\right)\)
-3. **Modèle basé sur le mispricing** : \(\gamma(t) = \gamma_0 \cdot \exp(\lambda \cdot |P_t - V_t|)\)
+3. **Modèle mispricing exponentiel** : \(\gamma(t) = \gamma_0 \cdot \exp(\lambda \cdot |P_t - V_t|)\)
+4. **Modèle mispricing décroissant** : \(\gamma(t) = \frac{\gamma_0}{1 + \lambda \cdot |P_t - V_t|}\)
+
+Le modèle 4 est l'extension prioritaire. Avec γ décroissant, un fort mispricing réduit directement la saturation des trend-followers (β·tanh(γ↓·M_t) → demande réduite), ce qui doit freiner la formation des bulles.
 
 ## Architecture du Code Souhaitée
 - `src/model.py` : Définition des classes de simulation (ex: `ChiarellaModel`, `AdaptiveGammaModel`).
