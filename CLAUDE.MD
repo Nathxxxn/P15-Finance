@@ -43,3 +43,27 @@ Claude, lorsque tu devras coder l'extension, base-toi sur la volatilité réalis
 ## Commandes Fréquentes
 - Lancer les tests : `pytest tests/`
 - Lancer le script de simulation de base : `python src/simulation.py`
+
+## Directives Git et Gitlab (CRUCIAL)
+Je travaille en équipe sur un dépôt Gitlab. Tu dois **absolument** respecter ces règles pour ne pas perturber le travail des autres :
+
+### Gestion des branches
+- **NE JAMAIS** push directement sur la branche `main` ou `master`.
+- **NE JAMAIS** créer de branches commençant par `claude/...` ou des noms aléatoires.
+- Si tu dois créer une branche pour ma fonctionnalité, utilise le format : `nathan/feat/gamma-adaptatif` ou `nathan/fix/nom-du-bug-gamma`.
+- Demande-moi toujours confirmation avant de changer de branche ou d'en créer une nouvelle.
+
+### Commits
+- Fais des petits commits logiques et atomiques (pas de commit géant "mise à jour générale").
+- Utilise la convention **Conventional Commits** pour les messages :
+  - `feat: [description]` (pour l'ajout d'une fonctionnalité, ex: `feat: ajout de la classe AdaptiveGammaModel`)
+  - `fix: [description]` (pour la correction d'un bug)
+  - `refactor: [description]` (pour la réorganisation du code sans changement de comportement)
+  - `docs: [description]` (pour les commentaires ou docstrings)
+- Les messages de commit doivent être en **français**, clairs et concis (moins de 50 caractères pour le titre).
+
+### Push et Synchronisation
+- Si je te demande de push, assure-toi d'avoir fait un `git pull --rebase` avant pour éviter les conflits avec le code de mes coéquipiers.
+
+### Fichiers ignorés
+- Ne commite jamais de fichiers de données `.csv`, `.pkl` ou dossiers d'environnement virtuel (ex: `venv/`, `.env`).
