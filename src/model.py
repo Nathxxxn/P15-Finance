@@ -13,9 +13,10 @@ Variables d'état :
     V_t  : log-valeur fondamentale
 
 Paramètre de saturation γ(t) :
-    - Baseline          : γ(t) = γ_0  (ChiarellaModel)
-    - Adaptatif linéaire : γ(t) = γ_0·(1 + θ·σ_réalisée(t)/σ_baseline)  (AdaptiveGammaModel)
-    - Mispricing         : γ(t) = γ_0·exp(λ·|P_t - V_t|)  (MispricingGammaModel)
+    - Baseline              : γ(t) = γ_0  (ChiarellaModel)
+    - Adaptatif linéaire    : γ(t) = γ_0·(1 + θ·σ_réalisée(t)/σ_baseline)  (AdaptiveGammaModel)
+    - Mispricing croissant  : γ(t) = γ_0·exp(λ·|P_t - V_t|)  (MispricingGammaModel)
+    - Mispricing décroissant: γ(t) = γ_0 / (1 + λ·|P_t - V_t|)  (DecreasingMispricingGammaModel)
 """
 
 from __future__ import annotations
@@ -293,6 +294,71 @@ class MispricingGammaModel(ChiarellaModel):
         """
         mispricing = np.abs(P[:, step] - V[:, step])  # shape (n_paths,)
         return self.params.gamma0 * np.exp(self.lambda_ * mispricing)
+
+
+# ---------------------------------------------------------------------------
+# Classe enfant : gamma mispricing décroissant (Option 4 du CLAUDE.md)
+# ---------------------------------------------------------------------------
+
+class DecreasingMispricingGammaModel(ChiarellaModel):
+    """Modèle avec γ décroissant en fonction du mispricing |P_t - V_t|.
+
+    Formulation (Option 4) :
+
+        γ(t) = γ_0 / (1 + λ · |P_t - V_t|)
+
+    Interprétation économique : lorsque le prix s'écarte fortement de la valeur
+    fondamentale (forte bulle), γ *diminue*, ce qui réduit directement la demande
+    des trend-followers β·tanh(γ(t)·M_t). Contrairement aux options 2 et 3 qui
+    augmentent γ (et donc amplifient paradoxalement les signaux intermédiaires),
+    cette formulation freine explicitement la demande des trend-followers pendant
+    les épisodes de bulle — mécanisme de stabilisation endogène.
+
+    Cas limites :
+        - λ = 0 → modèle baseline (γ = γ_0)
+        - λ → ∞ → γ(t) → 0 quelle que soit la bulle (trend-followers neutralisés)
+
+    Parameters
+    ----------
+    params : ModelParams
+        Paramètres hérités.
+    lambda_ : float
+        Sensibilité de la décroissance au mispricing (λ ≥ 0).
+    seed : int | None
+        Graine aléatoire.
+    """
+
+    def __init__(
+        self,
+        params: ModelParams | None = None,
+        lambda_: float = 1.0,
+        seed: int | None = None,
+    ) -> None:
+        super().__init__(params=params, seed=seed)
+        self.lambda_ = lambda_
+
+    def _gamma(
+        self,
+        P: np.ndarray,
+        M: np.ndarray,
+        V: np.ndarray,
+        step: int,
+    ) -> np.ndarray:
+        """γ(t) = γ_0 / (1 + λ · |P_t - V_t|).
+
+        Parameters
+        ----------
+        P, M, V : np.ndarray, shape (n_paths, n_steps+1)
+            Tableaux d'état courants (seules les colonnes ≤ step sont remplies).
+        step : int
+            Indice temporel courant.
+
+        Returns
+        -------
+        np.ndarray, shape (n_paths,)
+        """
+        mispricing = np.abs(P[:, step] - V[:, step])  # shape (n_paths,)
+        return self.params.gamma0 / (1.0 + self.lambda_ * mispricing)
 
 
 # ---------------------------------------------------------------------------

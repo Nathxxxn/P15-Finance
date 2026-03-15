@@ -119,6 +119,69 @@ Les trois modèles produisent des rendements quasi-identiques en termes de vol (
 | Interprétation éco. | Proxy VIX / aversion risque | Mécanisme correctif endogène |
 | Pertinence économique | Bonne intuition, effet contre-intuitif | Plus ciblé, moins d'effets de bord |
 
-**Piste pour la suite :** explorer des valeurs de λ plus faibles (0.1–0.5) pour le modèle mispricing, et tenter une formulation *décroissante* du type γ(t) = γ₀ / (1 + λ·|P−V|) qui freinerait explicitement les trend-followers lors des bulles, au lieu de les saturer plus vite via une pente plus raide du tanh.
+**Piste suivante :** tenter une formulation *décroissante* γ(t) = γ₀ / (1 + λ·|P−V|) qui freinerait explicitement la demande des trend-followers lors des bulles. → Implémenté dans la section [4].
+
+---
+
+### [4] Modèle mispricing décroissant — résultats et interprétation
+
+**Formule implémentée (Option 4) :**
+$$\gamma(t) = \frac{\gamma_0}{1 + \lambda \cdot |P_t - V_t|}$$
+
+**Paramètres :** γ₀ = 2.0, λ = 1.0, T = 1 000 mois, seed = 2024.
+
+#### Comportement de γ(t)
+
+| Métrique de γ | Baseline | Adaptatif | Mispricing↑ | **Décroissant** |
+|---|---|---|---|---|
+| γ moyen | 2.000 | 3.865 | 2.248 | **1.812** |
+| γ écart-type | 0.000 | 0.428 | 0.206 | **0.128** |
+| γ min | 2.000 | 2.000 | 2.000 | **1.370** |
+| γ max | 2.000 | 4.964 | 3.217 | **2.000** |
+| ρ(γ, driver) | — | +0.9996 | +0.9979 | **−0.9953** |
+
+La corrélation négative quasi-parfaite (ρ = −0.9953) avec |P−V| confirme le mécanisme : γ descend bien quand la bulle monte.
+
+#### Comparaison des quatre modèles sur le mispricing P−V
+
+| Modèle | Std(P−V) | Δstd | Max\|P−V\| | Δmax | Skewness | Kurtosis excéd. |
+|---|---|---|---|---|---|---|
+| Baseline | 0.1387 | — | 0.4656 | — | −0.518 | 0.471 |
+| Adaptatif | 0.1501 | **+8.2 %** | 0.4976 | **+6.9 %** | −0.465 | 0.416 |
+| Mispricing↑ | 0.1412 | **+1.8 %** | 0.4753 | **+2.1 %** | −0.526 | 0.509 |
+| **Décroissant** | **0.1372** | **−1.1 %** | **0.4597** | **−1.3 %** | −0.515 | 0.454 |
+
+**Résultat clé : le modèle décroissant est le seul à réduire les bulles.** Pour la première fois, std(P−V) passe en dessous du baseline (−1.1 %) et le max absolu diminue (−1.3 %).
+
+#### Interprétation économique
+
+La logique est simple et directe : quand le mispricing |P−V| augmente, γ(t) *diminue*, ce qui réduit la pente effective du tanh autour de zéro. La demande des trend-followers β·tanh(γ↓·M_t) est donc **moins forte** pendant les épisodes de bulle — même pour des signaux M_t modérés. Le mécanisme de stabilisation opère exactement là où on en a besoin, sans les effets de bord des formulations croissantes.
+
+Contrairement aux modèles 2 et 3 :
+- L'adaptatif monte γ quand la vol monte, ce qui amplifie la demande sur les signaux intermédiaires précisément pendant la *formation* des bulles.
+- Le mispricing↑ monte γ quand la bulle est déjà grande, trop tard pour éviter l'amplification initiale.
+- Le décroissant réduit γ dès que |P−V| grandit, freinant les trend-followers à chaque étape de la bulle.
+
+#### Comparaison des volatilités des rendements
+
+| Modèle | Vol annualisée | Skewness | Kurtosis excéd. |
+|---|---|---|---|
+| Baseline | 0.1805 | 0.044 | 0.074 |
+| Adaptatif | 0.1808 | 0.048 | 0.066 |
+| Mispricing↑ | 0.1805 | 0.045 | 0.072 |
+| **Décroissant** | **0.1806** | 0.043 | 0.075 |
+
+La volatilité des rendements reste quasi-identique dans les quatre cas (≈ 18 % annualisé). Le modèle décroissant ne détériore pas les propriétés statistiques des rendements tout en réduisant le mispricing — ce qui est une propriété souhaitable.
+
+#### Bilan général des 4 modèles
+
+| Modèle | Driver | Direction γ | Effet sur bulles | Pertinence |
+|---|---|---|---|---|
+| Baseline | — | constant | référence | référence |
+| Adaptatif | σ_réal (exogène) | ↑ | aggrave +8 % | intuition VIX, effet contre-intuitif |
+| Mispricing↑ | \|P−V\| (endogène) | ↑ | aggrave +2 % | ciblé mais effet de bord tanh |
+| **Décroissant** | \|P−V\| (endogène) | ↓ | **réduit −1 %** | mécanisme direct et cohérent |
+
+**Piste pour la suite :** calibrer λ plus finement (analyse de sensibilité sur λ ∈ [0.1, 5.0]) et tester sur des simulations Monte Carlo à grande échelle (N = 1 000 trajectoires) pour vérifier la robustesse statistique de la réduction du mispricing.
 
 ---
