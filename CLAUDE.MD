@@ -10,9 +10,18 @@ Rendre γ dynamique pour modéliser l'aversion au risque variable des investisse
 - ✅ Modèle 1 — Baseline (γ constant) : `ChiarellaModel`
 - ✅ Modèle 2 — Adaptatif linéaire (γ ∝ σ_réal) : `AdaptiveGammaModel`
 - ✅ Modèle 3 — Mispricing exponentiel (γ ∝ exp(λ|P−V|)) : `MispricingGammaModel`
-- 🔄 **Modèle 4 — Mispricing décroissant (γ ∝ 1/(1+λ|P−V|)) : `DecreasingMispricingGammaModel`** ← focus actuel
+- ✅ **Modèle 4 — Mispricing décroissant (γ ∝ 1/(1+λ|P−V|)) : `DecreasingMispricingGammaModel`**
 
-**Motivation du modèle 4 :** les modèles 2 et 3 *augmentent* γ avec la bulle, ce qui via la pente raide du tanh sur les signaux intermédiaires amplifie paradoxalement les bulles (+1.8 à +8 % de std du mispricing). Le modèle 4 inverse la logique : γ *diminue* quand |P−V| est grand, réduisant directement la demande des trend-followers pendant les bulles.
+**Résultat modèle 4 :** seul modèle à réduire les bulles (std mispricing −1.1 %, max|P−V| −1.3 %) sans dégrader la volatilité des rendements.
+
+## Prochaine Étape (à faire lors de la prochaine session)
+
+**Analyse de sensibilité sur λ pour le modèle décroissant (`DecreasingMispricingGammaModel`) :**
+
+1. **Sweep paramétrique** : simuler λ ∈ {0.1, 0.25, 0.5, 1.0, 2.0, 5.0} sur N=1 000 trajectoires Monte Carlo (n_paths=1000, même seed) et tracer std(P−V) et max|P−V| en fonction de λ — trouver le λ optimal.
+2. **Validation statistique** : utiliser un test de Wilcoxon ou bootstrap pour vérifier que la réduction du mispricing est significative (et pas juste du bruit sur 1 trajectoire).
+3. **Nouveau notebook** `notebooks/02_sensibilite_lambda.ipynb` dédié à cette analyse.
+4. Si les résultats sont robustes, mettre à jour le RAPPORT.MD avec les conclusions et envisager de présenter le modèle 4 comme contribution principale.
 
 ## Équations Mathématiques (Modèle de base)
 Le système dynamique stochastique en temps continu est défini par :
