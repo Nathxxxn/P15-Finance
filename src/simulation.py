@@ -25,7 +25,7 @@ import pandas as pd
 # Résolution d'import que l'on exécute en standalone ou en module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.model import AdaptiveGammaModel, ChiarellaModel, ModelParams, SimulationResult
+from src.model import AdaptiveGammaModel, ChiarellaModel, MispricingGammaModel, ModelParams, SimulationResult
 
 # ---------------------------------------------------------------------------
 # Paramètres standards (temps mensuel)
@@ -136,6 +136,33 @@ def run_adaptive(
     return result, df
 
 
+def run_mispricing(
+    lambda_: float = 1.0,
+    seed: int = SHARED_SEED,
+) -> tuple[SimulationResult, pd.DataFrame]:
+    """Simule le modèle mispricing (γ exponentiel en |P - V|).
+
+    Parameters
+    ----------
+    lambda_ : float
+        Sensibilité exponentielle au mispricing (λ).
+    seed : int
+        Graine aléatoire.
+
+    Returns
+    -------
+    (SimulationResult, pd.DataFrame)
+    """
+    model = MispricingGammaModel(
+        params=MONTHLY_PARAMS,
+        lambda_=lambda_,
+        seed=seed,
+    )
+    result = model.simulate(n_paths=1)
+    df = result_to_dataframe(result, label="mispricing")
+    return result, df
+
+
 def merge_results(df_baseline: pd.DataFrame, df_adaptive: pd.DataFrame) -> pd.DataFrame:
     """Fusionne les DataFrames baseline et adaptatif sur la colonne temporelle.
 
@@ -176,22 +203,31 @@ def main() -> pd.DataFrame:
     print(f"      → P finale : {res_base.P[-1]:.4f}")
 
     # ----- Adaptatif -----
-    print("\n[2/2] Modèle adaptatif (γ(t) = γ₀·(1+θ·σ/σ_base), θ=1.0) …")
+    print("\n[2/3] Modèle adaptatif (γ(t) = γ₀·(1+θ·σ/σ_base), θ=1.0) …")
     res_adap, df_adap = run_adaptive(theta=1.0, seed=SHARED_SEED)
     print(f"      → γ  : mean={res_adap.gamma.mean():.4f}  "
           f"min={res_adap.gamma.min():.4f}  max={res_adap.gamma.max():.4f}")
     print(f"      → P finale : {res_adap.P[-1]:.4f}")
 
+    # ----- Mispricing -----
+    print("\n[3/3] Modèle mispricing (γ(t) = γ₀·exp(λ·|P-V|), λ=1.0) …")
+    res_misp, df_misp = run_mispricing(lambda_=1.0, seed=SHARED_SEED)
+    print(f"      → γ  : mean={res_misp.gamma.mean():.4f}  "
+          f"min={res_misp.gamma.min():.4f}  max={res_misp.gamma.max():.4f}")
+    print(f"      → P finale : {res_misp.P[-1]:.4f}")
+
     # ----- Fusion -----
     df = merge_results(df_base, df_adap)
+    df = pd.merge(df, df_misp, on="t", how="inner")
 
     # Rendements log-prix pour chaque modèle
     df["baseline_ret"] = df["baseline_P"].diff()
     df["adaptive_ret"] = df["adaptive_P"].diff()
+    df["mispricing_ret"] = df["mispricing_P"].diff()
 
     # Résumé statistique rapide des rendements
     print("\n--- Statistiques des rendements mensuels ---")
-    stats_cols = ["baseline_ret", "adaptive_ret"]
+    stats_cols = ["baseline_ret", "adaptive_ret", "mispricing_ret"]
     print(df[stats_cols].describe().round(6).to_string())
 
     return df

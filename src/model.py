@@ -13,8 +13,9 @@ Variables d'état :
     V_t  : log-valeur fondamentale
 
 Paramètre de saturation γ(t) :
-    - Baseline         : γ(t) = γ_0  (ChiarellaModel)
-    - Adaptatif linéaire: γ(t) = γ_0·(1 + θ·σ_réalisée(t)/σ_baseline)  (AdaptiveGammaModel)
+    - Baseline          : γ(t) = γ_0  (ChiarellaModel)
+    - Adaptatif linéaire : γ(t) = γ_0·(1 + θ·σ_réalisée(t)/σ_baseline)  (AdaptiveGammaModel)
+    - Mispricing         : γ(t) = γ_0·exp(λ·|P_t - V_t|)  (MispricingGammaModel)
 """
 
 from __future__ import annotations
@@ -227,6 +228,71 @@ class ChiarellaModel:
         """
         n_paths = P.shape[0]
         return np.full(n_paths, self.params.gamma0)
+
+
+# ---------------------------------------------------------------------------
+# Classe enfant : gamma basé sur le mispricing (Option 3 du CLAUDE.md)
+# ---------------------------------------------------------------------------
+
+class MispricingGammaModel(ChiarellaModel):
+    """Modèle avec γ exponentiel basé sur le mispricing |P_t - V_t|.
+
+    Formulation (Option 3) :
+
+        γ(t) = γ_0 · exp(λ · |P_t - V_t|)
+
+    Interprétation économique : lorsque le prix s'écarte fortement de la valeur
+    fondamentale (fort mispricing), γ augmente de façon exponentielle.
+    Les trend-followers saturent donc plus vite leur demande, ce qui modélise
+    une réticence accrue à « chasser » la tendance quand le marché est déjà
+    très éloigné des fondamentaux.
+
+    Parameters
+    ----------
+    params : ModelParams
+        Paramètres hérités.
+    lambda_ : float
+        Sensibilité exponentielle au mispricing (λ ≥ 0).
+        λ = 0 → modèle baseline.
+    seed : int | None
+        Graine aléatoire.
+    """
+
+    def __init__(
+        self,
+        params: ModelParams | None = None,
+        lambda_: float = 1.0,
+        seed: int | None = None,
+    ) -> None:
+        super().__init__(params=params, seed=seed)
+        self.lambda_ = lambda_
+
+    # ------------------------------------------------------------------
+    # Hook γ(t) — mispricing exponentiel
+    # ------------------------------------------------------------------
+
+    def _gamma(
+        self,
+        P: np.ndarray,
+        M: np.ndarray,
+        V: np.ndarray,
+        step: int,
+    ) -> np.ndarray:
+        """γ(t) = γ_0 · exp(λ · |P_t - V_t|).
+
+        Parameters
+        ----------
+        P, M, V : np.ndarray, shape (n_paths, n_steps+1)
+            Tableaux d'état courants (seules les colonnes ≤ step sont remplies).
+        step : int
+            Indice temporel courant.
+
+        Returns
+        -------
+        np.ndarray, shape (n_paths,)
+        """
+        mispricing = np.abs(P[:, step] - V[:, step])  # shape (n_paths,)
+        return self.params.gamma0 * np.exp(self.lambda_ * mispricing)
 
 
 # ---------------------------------------------------------------------------
