@@ -17,6 +17,11 @@ Paramètre de saturation γ(t) :
     - Adaptatif linéaire    : γ(t) = γ_0·(1 + θ·σ_réalisée(t)/σ_baseline)  (AdaptiveGammaModel)
     - Mispricing croissant  : γ(t) = γ_0·exp(λ·|P_t - V_t|)  (MispricingGammaModel)
     - Mispricing décroissant: γ(t) = γ_0 / (1 + λ·|P_t - V_t|)  (DecreasingMispricingGammaModel)
+
+Extension multi-fondamentalistes :
+    - Plusieurs groupes i avec κ_i et V_i(t) différents  (MultiKappaModel)
+      dP_t = [Σ_i κ_i·(V_i(t) − P_t)]·dt + β·tanh(γ·M_t)·dt + σ_N·dW_t^(N)
+      dV_i(t) = g_i·dt + σ_Vi·dW_i(t)  (bruits indépendants)
 """
 
 from __future__ import annotations
@@ -501,3 +506,235 @@ class AdaptiveGammaModel(ChiarellaModel):
         returns = np.diff(P_arr, axis=1)                          # rendements
         sigma_real = returns.std(axis=1) / np.sqrt(self.params.dt)  # par trajectoire
         return float(sigma_real.mean())
+
+
+# ---------------------------------------------------------------------------
+# Extension multi-fondamentalistes : FundamentalistGroup + MultiKappaModel
+# ---------------------------------------------------------------------------
+
+@dataclass
+class FundamentalistGroup:
+    """Paramètres d'un groupe de fondamentalistes homogènes.
+
+    Chaque groupe possède sa propre force de rappel κ_i et son propre
+    processus de valeur fondamentale V_i(t) :
+
+        dV_i(t) = g_i·dt + σ_Vi·dW_i(t)
+
+    Les bruits dW_i sont indépendants entre groupes et indépendants
+    du bruit de prix dW^(N).
+
+    Attributes
+    ----------
+    kappa : float
+        Force de rappel vers V_i (κ_i > 0).
+    sigma_V : float
+        Volatilité du processus fondamental (σ_Vi ≥ 0).
+    g : float
+        Drift du processus fondamental (g_i). Défaut : 0.
+    V0 : float
+        Condition initiale de V_i. Défaut : 0.
+    """
+    kappa: float
+    sigma_V: float
+    g: float = 0.0
+    V0: float = 0.0
+
+
+class MultiKappaSimulationResult(NamedTuple):
+    """Trajectoires simulées par MultiKappaModel.
+
+    Attributes
+    ----------
+    t : np.ndarray, shape (n_steps+1,)
+        Grille temporelle.
+    P : np.ndarray, shape (n_steps+1,) ou (n_paths, n_steps+1)
+        Log-prix.
+    M : np.ndarray, même shape que P
+        Signal de tendance.
+    V_bar : np.ndarray, même shape que P
+        Valeur fondamentale de consensus pondérée :
+        V̄ = Σ(κ_i·V_i) / Σκ_i.
+    V_all : np.ndarray, shape (N_groups, n_steps+1) ou (N_groups, n_paths, n_steps+1)
+        Valeurs fondamentales individuelles de chaque groupe.
+    gamma : np.ndarray, même shape que P
+        Valeur de γ(t) à chaque instant (constant ici).
+    """
+    t: np.ndarray
+    P: np.ndarray
+    M: np.ndarray
+    V_bar: np.ndarray
+    V_all: np.ndarray
+    gamma: np.ndarray
+
+
+class MultiKappaModel:
+    """Modèle de Chiarella étendu avec N groupes de fondamentalistes.
+
+    Le terme fondamentaliste agrégé remplace κ(V−P) par :
+
+        Σ_i κ_i · (V_i(t) − P_t)
+
+    où chaque groupe i a sa propre force de rappel κ_i et son propre
+    processus de valeur fondamentale V_i(t) avec bruit indépendant.
+
+    Équations complètes :
+
+        dP_t = [Σ_i κ_i·(V_i(t) − P_t)]·dt + β·tanh(γ_0·M_t)·dt + σ_N·√dt·ξ_t^(N)
+        dM_t = M_t·(1 − α·dt) + α·dP_t
+        dV_i(t) = g_i·dt + σ_Vi·√dt·ξ_t^(i)     pour chaque groupe i
+
+    où tous les ξ sont des bruits blancs gaussiens standards indépendants.
+
+    Le paramètre γ est constant (= γ_0) dans ce modèle. Pour combiner
+    multi-κ et γ dynamique, sous-classer MultiKappaModel et surcharger
+    la méthode `_gamma()`.
+
+    Parameters
+    ----------
+    groups : list[FundamentalistGroup]
+        Liste des N groupes de fondamentalistes.
+    base_params : ModelParams
+        Paramètres partagés (beta, alpha, gamma0, sigma_N, dt, T).
+        Les champs kappa, sigma_V, g sont ignorés (remplacés par `groups`).
+    seed : int | None
+        Graine aléatoire.
+    """
+
+    def __init__(
+        self,
+        groups: list[FundamentalistGroup],
+        base_params: ModelParams | None = None,
+        seed: int | None = None,
+    ) -> None:
+        if not groups:
+            raise ValueError("Au moins un FundamentalistGroup est requis.")
+        self.groups = groups
+        self.params = base_params or ModelParams()
+        self.rng = np.random.default_rng(seed)
+
+    # ------------------------------------------------------------------
+    # Hook γ(t) — constant ici, à surcharger pour un γ dynamique
+    # ------------------------------------------------------------------
+
+    def _gamma(self, P: np.ndarray, M: np.ndarray, step: int) -> np.ndarray:
+        """Retourne γ_0 constant pour toutes les trajectoires.
+
+        Parameters
+        ----------
+        P, M : np.ndarray, shape (n_paths, n_steps+1)
+        step : int
+
+        Returns
+        -------
+        np.ndarray, shape (n_paths,)
+        """
+        return np.full(P.shape[0], self.params.gamma0)
+
+    # ------------------------------------------------------------------
+    # Simulation principale
+    # ------------------------------------------------------------------
+
+    def simulate(
+        self,
+        n_paths: int = 1,
+        P0: float = 0.0,
+        M0: float = 0.0,
+    ) -> MultiKappaSimulationResult:
+        """Lance la simulation Monte Carlo sur `n_paths` trajectoires.
+
+        Parameters
+        ----------
+        n_paths : int
+            Nombre de trajectoires indépendantes.
+        P0 : float
+            Condition initiale commune du log-prix.
+        M0 : float
+            Condition initiale du signal de tendance.
+
+        Returns
+        -------
+        MultiKappaSimulationResult
+        """
+        p = self.params
+        n_groups = len(self.groups)
+        n_steps = int(p.T / p.dt)
+        sqrt_dt = np.sqrt(p.dt)
+
+        t = np.linspace(0.0, p.T, n_steps + 1)
+
+        # Tableaux d'état : (n_paths, n_steps+1)
+        shape = (n_paths, n_steps + 1)
+        P = np.empty(shape)
+        M = np.empty(shape)
+        gamma_arr = np.empty(shape)
+
+        # Valeurs fondamentales : (n_groups, n_paths, n_steps+1)
+        V = np.empty((n_groups, n_paths, n_steps + 1))
+
+        # Conditions initiales
+        P[:, 0] = P0
+        M[:, 0] = M0
+        for i, grp in enumerate(self.groups):
+            V[i, :, 0] = grp.V0
+
+        # Bruits pré-générés : prix + un bruit par groupe fondamentaliste
+        xi_N = self.rng.standard_normal((n_paths, n_steps))          # bruit de prix
+        xi_V = self.rng.standard_normal((n_groups, n_paths, n_steps)) # bruits fondamentaux
+
+        # Boucle temporelle
+        for step in range(n_steps):
+            gam = self._gamma(P, M, step)
+            gamma_arr[:, step] = gam
+
+            # Terme fondamentaliste agrégé : Σ κ_i·(V_i − P)
+            fundamental_drift = np.zeros(n_paths)
+            for i, grp in enumerate(self.groups):
+                fundamental_drift += grp.kappa * (V[i, :, step] - P[:, step])
+
+            # Incrément de prix
+            drift_P = fundamental_drift + p.beta * np.tanh(gam * M[:, step])
+            dP = drift_P * p.dt + p.sigma_N * sqrt_dt * xi_N[:, step]
+
+            # Mise à jour prix et signal
+            P[:, step + 1] = P[:, step] + dP
+            M[:, step + 1] = M[:, step] * (1.0 - p.alpha * p.dt) + p.alpha * dP
+
+            # Mise à jour de chaque V_i
+            for i, grp in enumerate(self.groups):
+                V[i, :, step + 1] = (
+                    V[i, :, step]
+                    + grp.g * p.dt
+                    + grp.sigma_V * sqrt_dt * xi_V[i, :, step]
+                )
+
+        # Dernier γ
+        gamma_arr[:, -1] = self._gamma(P, M, n_steps)
+
+        # Valeur fondamentale de consensus pondérée : V̄ = Σ(κ_i·V_i) / Σκ_i
+        kappas = np.array([grp.kappa for grp in self.groups])
+        kappa_total = kappas.sum()
+        if kappa_total == 0.0:
+            V_bar = np.zeros(shape)
+        else:
+            # (n_groups, 1, 1) pour broadcast sur (n_groups, n_paths, n_steps+1)
+            V_bar = (kappas[:, np.newaxis, np.newaxis] * V).sum(axis=0) / kappa_total
+
+        # Squeeze si n_paths == 1
+        if n_paths == 1:
+            return MultiKappaSimulationResult(
+                t=t,
+                P=P[0],
+                M=M[0],
+                V_bar=V_bar[0],
+                V_all=V[:, 0, :],   # shape (n_groups, n_steps+1)
+                gamma=gamma_arr[0],
+            )
+        return MultiKappaSimulationResult(
+            t=t,
+            P=P,
+            M=M,
+            V_bar=V_bar,
+            V_all=V,                # shape (n_groups, n_paths, n_steps+1)
+            gamma=gamma_arr,
+        )

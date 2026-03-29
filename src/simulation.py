@@ -25,7 +25,17 @@ import pandas as pd
 # Résolution d'import que l'on exécute en standalone ou en module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.model import AdaptiveGammaModel, ChiarellaModel, DecreasingMispricingGammaModel, MispricingGammaModel, ModelParams, SimulationResult
+from src.model import (
+    AdaptiveGammaModel,
+    ChiarellaModel,
+    DecreasingMispricingGammaModel,
+    FundamentalistGroup,
+    MispricingGammaModel,
+    ModelParams,
+    MultiKappaModel,
+    MultiKappaSimulationResult,
+    SimulationResult,
+)
 
 # ---------------------------------------------------------------------------
 # Paramètres standards (temps mensuel)
@@ -265,6 +275,58 @@ def main() -> pd.DataFrame:
     print(df[stats_cols].describe().round(6).to_string())
 
     return df
+
+
+# ---------------------------------------------------------------------------
+# Multi-fondamentalistes
+# ---------------------------------------------------------------------------
+
+def run_multi_kappa(
+    groups: list[FundamentalistGroup],
+    seed: int = SHARED_SEED,
+    n_paths: int = 1,
+    P0: float = 0.0,
+    M0: float = 0.0,
+) -> tuple[MultiKappaSimulationResult, pd.DataFrame]:
+    """Simule le modèle multi-fondamentalistes (κ_i, V_i différents).
+
+    Parameters
+    ----------
+    groups : list[FundamentalistGroup]
+        Liste des groupes de fondamentalistes.
+    seed : int
+        Graine aléatoire.
+    n_paths : int
+        Nombre de trajectoires Monte Carlo.
+    P0, M0 : float
+        Conditions initiales du prix et du signal de tendance.
+
+    Returns
+    -------
+    (MultiKappaSimulationResult, pd.DataFrame)
+        Le DataFrame contient les colonnes : t, P, M, V_bar, gamma,
+        ainsi que V_0, V_1, … pour chaque groupe.
+    """
+    model = MultiKappaModel(groups=groups, base_params=MONTHLY_PARAMS, seed=seed)
+    result = model.simulate(n_paths=n_paths, P0=P0, M0=M0)
+
+    if result.P.ndim != 1:
+        raise ValueError(
+            "run_multi_kappa attend n_paths=1 pour la conversion en DataFrame."
+        )
+
+    df = pd.DataFrame({
+        "t":     result.t,
+        "P":     result.P,
+        "M":     result.M,
+        "V_bar": result.V_bar,
+        "gamma": result.gamma,
+    })
+    # Ajouter chaque V_i individuel
+    for i in range(result.V_all.shape[0]):
+        df[f"V_{i}"] = result.V_all[i]
+
+    return result, df
 
 
 if __name__ == "__main__":
