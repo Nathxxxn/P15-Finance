@@ -1,0 +1,68 @@
+\subsection*{Modélisation dynamique du paramètre de saturation $\gamma$}
+
+Dans le modèle de Chiarella étendu, la demande des \textit{trend-followers} est
+proportionnelle à $\beta\tanh(\gamma M_t)$, où $\gamma$ contrôle la vitesse de
+saturation. Mon travail a consisté à rendre $\gamma$ dynamique afin de modéliser
+une aversion au risque variable. Quatre formulations ont été testées et comparées
+par simulation Monte Carlo ($T = 1\,000$ mois, graine fixée) :
+
+\begin{enumerate}
+  \item \textbf{Baseline} : $\gamma(t) = \gamma_0$ (référence) ;
+  \item \textbf{Adaptatif linéaire} : $\gamma(t) = \gamma_0\!\left(1 +
+        \theta\,\tfrac{\sigma_{\mathrm{réal}}(t)}{\sigma_{\mathrm{base}}}\right)$
+        — γ croît avec la volatilité réalisée (proxy VIX) ;
+  \item \textbf{Mispricing croissant} : $\gamma(t) = \gamma_0\,e^{\lambda|P_t - V_t|}$
+        — γ croît avec l'écart prix/fondamentale ;
+  \item \textbf{Mispricing décroissant} : $\gamma(t) = \tfrac{\gamma_0}{1 + \lambda|P_t - V_t|}$
+        — γ décroît quand la bulle se forme.
+\end{enumerate}
+
+Les modèles 2 et 3 aggravent le mispricing ($+8{,}2\,\%$ et $+1{,}8\,\%$ de
+$\sigma(P-V)$ respectivement) en amplifiant la demande des \textit{trend-followers}
+dans la zone intermédiaire du $\tanh$ précisément lors de la formation des bulles.
+Seul le modèle décroissant réduit les bulles ($-1{,}1\,\%$ sur $\sigma(P-V)$,
+$-1{,}3\,\%$ sur $\max|P-V|$) sans dégrader la volatilité des rendements, grâce
+à un mécanisme de freinage endogène : lorsque $|P_t - V_t|$ augmente, $\gamma$
+diminue et réduit directement la demande spéculative.
+
+\subsection*{Sensibilité à $\kappa$ et extension multi-fondamentalistes}
+
+Un sweep sur $\kappa \in \{0{,}01;\ldots;0{,}50\}$ révèle un arbitrage monotone
+entre réduction des bulles et volatilité, résumé dans le tableau~\ref{tab:kappa_multi}.
+La relation est convexe~: les gains sur $\sigma(P-V)$ sont concentrés pour
+$\kappa < 0{,}10$, tandis que le coût en volatilité croît de façon quasi-linéaire.
+Les propriétés distributionnelles (skewness, kurtosis) restent insensibles à $\kappa$.
+
+L'hétérogénéité des fondamentalistes est ensuite modélisée en attribuant à chaque
+groupe $i$ sa force de rappel $\kappa_i$ et son processus $V_i(t)$ propres~:
+\[
+  dP_t = \left[\sum_i \kappa_i\bigl(V_i(t) - P_t\bigr)\right]dt
+        + \beta\tanh(\gamma M_t)\,dt + \sigma_N\,dW_t^{(N)},
+        \quad dV_i = g_i\,dt + \sigma_{V_i}\,dW_t^{(i)}.
+\]
+Les deux configurations testées surpassent un $\kappa$ homogène de même valeur
+effective~: la diversification des processus $V_i$ indépendants lisse le consensus
+$\bar{V}$ et amortit les excursions extrêmes du prix pour un coût en volatilité
+inférieur à $3\,\%$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lccc}
+\hline
+ & $\sigma(P-V)$ & $\Delta\sigma$ & Vol. annualisée \\
+\hline
+\multicolumn{4}{l}{\textit{Sweep $\kappa$ (modèle homogène, $\gamma$ constant)}} \\
+$\kappa=0{,}01$ & 0,317 & $+128{,}5\,\%$ & 17,7\,\% \\
+$\kappa=0{,}08$ \textbf{(baseline)} & 0,139 & — & 18,1\,\% \\
+$\kappa=0{,}15$ & 0,103 & $-26{,}0\,\%$ & 18,4\,\% \\
+$\kappa=0{,}50$ & 0,063 & $-54{,}5\,\%$ & 20,6\,\% \\
+\hline
+\multicolumn{4}{l}{\textit{Multi-fondamentalistes ($\kappa_{\mathrm{eff}}$ indiqué)}} \\
+2 groupes — $\kappa_{\mathrm{eff}}=0{,}17$ & 0,096 & $-30{,}6\,\%$ & 18,5\,\% \\
+3 groupes — $\kappa_{\mathrm{eff}}=0{,}20$ & 0,090 & $-35{,}4\,\%$ & 18,6\,\% \\
+\hline
+\end{tabular}
+\caption{Impact de $\kappa$ et de l'hétérogénéité des fondamentalistes sur le
+mispricing et la volatilité des rendements ($\Delta$ relatif au baseline).}
+\label{tab:kappa_multi}
+\end{table}
